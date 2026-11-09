@@ -46,6 +46,37 @@ const announcementSchema = new mongoose.Schema({
 const Admin = mongoose.model("Admin", adminSchema);
 const Announcement = mongoose.model("Announcement", announcementSchema);
 
+const fieldNames = {
+  firstName: "First name",
+  lastName: "Last name",
+  birthdate: "Birthdate",
+  sex: "Sex",
+  purok: "Purok",
+  contactNumber: "Contact number",
+  resident: "Resident",
+  type: "Request type",
+  status: "Status",
+  title: "Title",
+  message: "Message"
+};
+
+function errorMessage(err) {
+  if (err.name === "ValidationError") {
+    return Object.values(err.errors).map((e) => {
+      const name = fieldNames[e.path] || e.path;
+      if (e.kind === "required") return name + " is required";
+      if (e.kind === "enum") return name + " has an invalid value";
+      if (e.name === "CastError") return name + " is not valid";
+      return e.message;
+    }).join(". ");
+  }
+  if (err.name === "CastError") {
+    if (err.path === "_id") return "Invalid ID";
+    return (fieldNames[err.path] || err.path) + " is not valid";
+  }
+  return err.message;
+}
+
 app.use(session({
   secret: process.env.SESSION_SECRET || "dev-secret-change-me",
   resave: false,
@@ -79,6 +110,7 @@ function needLogin(req, res, next) {
   }
 }
 app.use(["/residents", "/requests", "/stats", "/announcements", "/me"], needLogin);
+
 app.get("/residents", async (req, res) => {
   try {
     const residents = await Resident.find().sort({ lastName: 1 });
@@ -96,7 +128,7 @@ app.get("/residents/:id", async (req, res) => {
     }
     res.json(resident);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: errorMessage(err) });
   }
 });
 
@@ -109,7 +141,7 @@ app.post("/residents", async (req, res) => {
     }).collation({ locale: "en", strength: 2 });
 
     if (same) {
-      return res.status(400).json({ error: "This resident is already registered" });
+      return res.status(409).json({ error: "This resident is already registered" });
     }
 
     const newResident = new Resident({
@@ -124,7 +156,7 @@ app.post("/residents", async (req, res) => {
     const saved = await newResident.save();
     res.status(201).json(saved);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: errorMessage(err) });
   }
 });
 
@@ -148,7 +180,7 @@ app.put("/residents/:id", async (req, res) => {
     }
     res.json(updated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: errorMessage(err) });
   }
 });
 
@@ -161,7 +193,7 @@ app.delete("/residents/:id", async (req, res) => {
     await DocRequest.deleteMany({ resident: req.params.id });
     res.json(deleted);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: errorMessage(err) });
   }
 });
 
@@ -184,7 +216,7 @@ app.get("/requests/:id", async (req, res) => {
     }
     res.json(request);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: errorMessage(err) });
   }
 });
 
@@ -203,7 +235,7 @@ app.post("/requests", async (req, res) => {
     const saved = await newRequest.save();
     res.status(201).json(saved);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: errorMessage(err) });
   }
 });
 
@@ -219,7 +251,7 @@ app.put("/requests/:id", async (req, res) => {
     }
     res.json(updated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: errorMessage(err) });
   }
 });
 
@@ -269,7 +301,7 @@ app.post("/announcements", async (req, res) => {
     const saved = await newAnnouncement.save();
     res.status(201).json(saved);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: errorMessage(err) });
   }
 });
 
@@ -281,7 +313,7 @@ app.delete("/announcements/:id", async (req, res) => {
     }
     res.json(deleted);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: errorMessage(err) });
   }
 });
 
@@ -291,7 +323,7 @@ mongoose.connect(process.env.MONGO_URI)
   .then(async () => {
     console.log("Connected to MongoDB");
 
-        if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD) {
+    if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD) {
       const exists = await Admin.exists({ username: process.env.ADMIN_USERNAME });
       if (!exists) {
         await Admin.create({
